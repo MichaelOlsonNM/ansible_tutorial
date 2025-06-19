@@ -18,6 +18,48 @@
       update_cache: yes
     when: ansible_distribution == "Ubuntu"
 
+- hosts: all
+  become: true
+  tasks:
+
+  - name: create pa231307 user
+    tags: always
+    user:
+      name: pa231307
+      groups: root
+
+  - name: add ssh key for pa231307
+    tags: always
+    authorized_key:
+      user: pa231307
+      key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIF4RpFjXvMBzItT2D/WxZlWJTiX6woLy3t1CHn2wytDw ansible"
+
+  - name: add sudoers file for pa231307
+    tags: always
+    copy:
+      src: sudoer_pa231307
+      dest: /etc/sudoers.d/pa231307
+      owner: root
+      group: root
+      mode: 0440
+
+- hosts: workstations
+  become: true
+  tasks:
+
+  - name: install unzip
+    package:
+      name: unzip
+
+  - name: install terraform
+    unarchive:
+      src: https://releases.hashicorp.com/terraform/1.12.2/terraform_1.12.2_linux_amd64.zip
+      dest:  /usr/local/bin
+      remote_src: yes
+      mode: 0755
+      owner: root
+      group: root
+
 - hosts: web_servers
   become: true
   tasks:
@@ -30,6 +72,30 @@
         - libapache2-mod-php
       state: latest
     when: ansible_distribution == "Ubuntu"
+
+  - name: start apache2 (Ubuntu)
+    tags: apache2,ubuntu
+    service:
+      name: apache2
+      state: started
+      enabled: yes
+    when: ansible_distribution == "Ubuntu"
+
+  - name: cheange timeout value
+    tags: apache,apache2,ubuntu
+    lineinfile:
+      path: /etc/apache2/apache2.conf
+      regexp: '^Timeout'
+      line: Timeout 299
+    when: ansible_distribution == "Ubuntu"
+    register: apache2
+
+  - name: restart apache2 (Ubuntu)
+    tags: apache,apache2,ubuntu
+    service:
+      name: apache2
+      state: restarted
+    when: apache2.changed
 
   - name: copy default html file for site
     tags: apache,apache2,ubuntu
@@ -48,15 +114,6 @@
         - php
       state: latest
     when: ansible_distribution == "CentOS"
-
-  - name: copy default html file for site
-    tags: apache,apache2,httpd
-    copy:
-      src: default_site.html
-      dest: /var/www/html/index.html
-      owner: root
-      group: root
-      mode: 0644
 
 - hosts: db_servers
   become: true
